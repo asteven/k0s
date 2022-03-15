@@ -134,9 +134,6 @@ spec:
     provider: calico
     calico:
       mode: "bird"
-    dualStack:
-      enabled: true
-      IPv6podCIDR: "fd00::/108"
-      IPv6serviceCIDR: "fd01::/108"
-    podCIDR: 10.244.0.0/16
-    serviceCIDR: 10.96.0.0/12`
+    podCIDR: "10.244.0.0/16,fd00::/108"
+    serviceCIDR: "10.96.0.0/12,fd01::/108"
+`

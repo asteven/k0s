@@ -52,6 +52,8 @@ func NewClient(certDir, etcdCertDir string, etcdConf *v1beta1.EtcdConfig) (*Clie
 	}
 
 	cfg := clientv3.Config{
+		// FIXME: does this have to be ipv6 here or not?
+		//Endpoints: []string{"https://127.0.0.1:2379", "https://[::1]:2379",},
 		Endpoints: etcdConf.GetEndpoints(),
 		TLS:       tlsConfig,
 	}

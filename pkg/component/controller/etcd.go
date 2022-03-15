@@ -38,6 +38,8 @@ import (
 	"github.com/k0sproject/k0s/pkg/etcd"
 	"github.com/k0sproject/k0s/pkg/supervisor"
 	"github.com/k0sproject/k0s/pkg/token"
+
+	utilnet "k8s.io/utils/net"
 )
 
 // Etcd implement the component interface to run etcd
@@ -146,14 +148,21 @@ func (e *Etcd) Run(ctx context.Context) error {
 		return err
 	}
 
-	peerURL := fmt.Sprintf("https://%s:2380", e.Config.PeerAddress)
+	peerAddress := e.Config.PeerAddress
+	localhostAddress := "127.0.0.1"
+	if utilnet.IsIPv6String(peerAddress) {
+		peerAddress = fmt.Sprintf("[%s]", peerAddress)
+		localhostAddress = "[::1]"
+	}
+	peerURL := fmt.Sprintf("https://%s:2380", peerAddress)
 
 	args := stringmap.StringMap{
 		"--data-dir":                    e.K0sVars.EtcdDataDir,
-		"--listen-client-urls":          "https://127.0.0.1:2379",
-		"--advertise-client-urls":       "https://127.0.0.1:2379",
+		"--listen-client-urls":          fmt.Sprintf("https://%s:2379,https://%s:2379", localhostAddress, peerAddress),
+		"--advertise-client-urls":       fmt.Sprintf("https://%s:2379", peerAddress),
 		"--client-cert-auth":            "true",
 		"--listen-peer-urls":            peerURL,
+		"--listen-metrics-urls":         fmt.Sprintf("https://%s:2381", localhostAddress),
 		"--initial-advertise-peer-urls": peerURL,
 		"--name":                        name,
 		"--trusted-ca-file":             etcdCaCert,
@@ -235,6 +244,7 @@ func (e *Etcd) setupCerts(ctx context.Context) error {
 			CAKey:  etcdCaCertKey,
 			Hostnames: []string{
 				"127.0.0.1",
+				"::1",
 				"localhost",
 			},
 		}
@@ -252,7 +262,9 @@ func (e *Etcd) setupCerts(ctx context.Context) error {
 			CAKey:  etcdCaCertKey,
 			Hostnames: []string{
 				"127.0.0.1",
+				"::1",
 				"localhost",
+				e.Config.PeerAddress,
 			},
 		}
 		_, err := e.CertManager.EnsureCertificate(etcdCertReq, constant.EtcdUser)

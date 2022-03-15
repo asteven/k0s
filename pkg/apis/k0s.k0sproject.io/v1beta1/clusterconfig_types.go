@@ -297,7 +297,6 @@ func (c *ClusterConfig) GetBootstrappingConfig(storageSpec *StorageSpec) *Cluste
 			Storage: storageSpec,
 			Network: &Network{
 				ServiceCIDR: c.Spec.Network.ServiceCIDR,
-				DualStack:   c.Spec.Network.DualStack,
 			},
 			Install: c.Spec.Install,
 		},

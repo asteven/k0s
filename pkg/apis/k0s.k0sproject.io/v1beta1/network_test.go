@@ -18,6 +18,7 @@ package v1beta1
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -32,12 +33,19 @@ func (s *NetworkSuite) TestAddresses() {
 		s.NoError(err)
 		s.Equal("10.96.0.10", dns)
 	})
-	s.T().Run("DNS_uses_non_default_service_cidr", func(t *testing.T) {
+	s.T().Run("DNS_uses_non_default_service_cidr_ipv4", func(t *testing.T) {
 		n := DefaultNetwork()
 		n.ServiceCIDR = "10.96.0.248/29"
 		dns, err := n.DNSAddress()
 		s.NoError(err)
 		s.Equal("10.96.0.250", dns)
+	})
+	s.T().Run("DNS_uses_non_default_service_cidr_ipv6", func(t *testing.T) {
+		n := DefaultNetwork()
+		n.ServiceCIDR = "fd00::/108"
+		dns, err := n.DNSAddress()
+		s.NoError(err)
+		s.Equal("fd00::a", dns)
 	})
 	s.T().Run("Internal_api_address_default", func(t *testing.T) {
 		n := DefaultNetwork()
@@ -45,40 +53,26 @@ func (s *NetworkSuite) TestAddresses() {
 		s.NoError(err)
 		s.Equal([]string{"10.96.0.1"}, api)
 	})
-	s.T().Run("Internal_api_address_non_default_single_stack", func(t *testing.T) {
+	s.T().Run("Internal_api_address_non_default_ipv4", func(t *testing.T) {
 		n := DefaultNetwork()
 		n.ServiceCIDR = "10.96.0.248/29"
 		api, err := n.InternalAPIAddresses()
 		s.NoError(err)
 		s.Equal([]string{"10.96.0.249"}, api)
 	})
+	s.T().Run("Internal_api_address_non_default_ipv6", func(t *testing.T) {
+		n := DefaultNetwork()
+		n.ServiceCIDR = "fd00::/108"
+		api, err := n.InternalAPIAddresses()
+		s.NoError(err)
+		s.Equal([]string{"fd00::1"}, api)
+	})
 	s.T().Run("Internal_api_address_non_default_dual_stack", func(t *testing.T) {
 		n := DefaultNetwork()
-		n.ServiceCIDR = "10.96.0.248/29"
-		n.DualStack.Enabled = true
-		n.DualStack.IPv6ServiceCIDR = "fd00::/108"
+		n.ServiceCIDR = "10.96.0.248/29,fd00::/108"
 		api, err := n.InternalAPIAddresses()
 		s.NoError(err)
 		s.Equal([]string{"10.96.0.249", "fd00::1"}, api)
-	})
-
-	s.T().Run("BuildServiceCIDR ordering", func(t *testing.T) {
-		t.Run("single_stack_default", func(t *testing.T) {
-			n := DefaultNetwork()
-			s.Equal(n.ServiceCIDR, n.BuildServiceCIDR("10.96.0.249"))
-		})
-		t.Run("dual_stack_api_listens_on_ipv4", func(t *testing.T) {
-			n := DefaultNetwork()
-			n.DualStack.Enabled = true
-			n.DualStack.IPv6ServiceCIDR = "fd00::/108"
-			s.Equal(n.ServiceCIDR+","+n.DualStack.IPv6ServiceCIDR, n.BuildServiceCIDR("10.96.0.249"))
-		})
-		t.Run("dual_stack_api_listens_on_ipv6", func(t *testing.T) {
-			n := DefaultNetwork()
-			n.DualStack.Enabled = true
-			n.DualStack.IPv6ServiceCIDR = "fd00::/108"
-			s.Equal(n.DualStack.IPv6ServiceCIDR+","+n.ServiceCIDR, n.BuildServiceCIDR("fe80::cf8:3cff:fef2:c5ca"))
-		})
 	})
 }
 
@@ -215,11 +209,9 @@ func (s *NetworkSuite) TestValidation() {
 		n := DefaultNetwork()
 		n.Calico = DefaultCalico()
 		n.Calico.Mode = "bird"
-		n.DualStack = DefaultDualStack()
-		n.DualStack.Enabled = true
 		n.KubeProxy.Mode = "ipvs"
-		n.DualStack.IPv6PodCIDR = "fd00::/108"
-		n.DualStack.IPv6ServiceCIDR = "foobar"
+		n.PodCIDR = "fd00::/108"
+		n.ServiceCIDR = "foobar"
 
 		errors := n.Validate()
 		s.NotNil(errors)
@@ -231,10 +223,8 @@ func (s *NetworkSuite) TestValidation() {
 		n := DefaultNetwork()
 		n.Calico = DefaultCalico()
 		n.Calico.Mode = "bird"
-		n.DualStack = DefaultDualStack()
-		n.DualStack.IPv6PodCIDR = "foobar"
-		n.DualStack.IPv6ServiceCIDR = "fd00::/108"
-		n.DualStack.Enabled = true
+		n.PodCIDR = "foobar"
+		n.ServiceCIDR = "fd00::/108"
 		n.KubeProxy.Mode = "ipvs"
 
 		errors := n.Validate()
@@ -257,12 +247,10 @@ func (s *NetworkSuite) TestValidation() {
 		n := DefaultNetwork()
 		n.Calico = DefaultCalico()
 		n.Calico.Mode = "bird"
-		n.DualStack = DefaultDualStack()
-		n.DualStack.Enabled = true
 		n.KubeProxy.Disabled = true
 		n.KubeProxy.Mode = "iptables"
-		n.DualStack.IPv6PodCIDR = "fd00::/108"
-		n.DualStack.IPv6ServiceCIDR = "fd01::/108"
+		n.PodCIDR = "fd00::/108"
+		n.ServiceCIDR = "fd01::/108"
 
 		errors := n.Validate()
 		s.Nil(errors)

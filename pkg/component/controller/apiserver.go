@@ -136,7 +136,7 @@ func (a *APIServer) Run(_ context.Context) error {
 		args[name] = value
 	}
 
-	if a.ClusterConfig.Spec.Network.DualStack.Enabled {
+	if a.ClusterConfig.Spec.Network.IsDualStack() {
 		args = v1beta1.EnableFeatureGate(args, v1beta1.DualStackFeatureGate)
 	}
 	args = v1beta1.EnableFeatureGate(args, v1beta1.ServiceInternalTrafficPolicyFeatureGate)

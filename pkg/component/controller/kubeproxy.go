@@ -107,7 +107,7 @@ func (k *KubeProxy) getConfig(clusterConfig *v1beta1.ClusterConfig) (proxyConfig
 		ControlPlaneEndpoint: clusterConfig.Spec.API.APIAddressURL(),
 		Image:                clusterConfig.Spec.Images.KubeProxy.URI(),
 		PullPolicy:           clusterConfig.Spec.Images.DefaultPullPolicy,
-		DualStack:            clusterConfig.Spec.Network.DualStack.Enabled,
+		DualStack:            clusterConfig.Spec.Network.IsDualStack(),
 		Mode:                 clusterConfig.Spec.Network.KubeProxy.Mode,
 	}
 

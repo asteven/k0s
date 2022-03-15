@@ -126,11 +126,11 @@ func (k *KubeletConfig) createProfiles(clusterSpec *v1beta1.ClusterConfig) (*byt
 		return nil, fmt.Errorf("failed to get DNS address for kubelet config: %v", err)
 	}
 	manifest := bytes.NewBuffer([]byte{})
-	defaultProfile := getDefaultProfile(dnsAddress, clusterSpec.Spec.Network.DualStack.Enabled)
+	defaultProfile := getDefaultProfile(dnsAddress, clusterSpec.Spec.Network.IsDualStack())
 	defaultProfile["cgroupsPerQOS"] = true
 	defaultProfile["resolvConf"] = "{{.ResolvConf}}"
 
-	winDefaultProfile := getDefaultProfile(dnsAddress, clusterSpec.Spec.Network.DualStack.Enabled)
+	winDefaultProfile := getDefaultProfile(dnsAddress, clusterSpec.Spec.Network.IsDualStack())
 	winDefaultProfile["cgroupsPerQOS"] = false
 
 	if err := k.writeConfigMapWithProfile(manifest, "default", defaultProfile); err != nil {

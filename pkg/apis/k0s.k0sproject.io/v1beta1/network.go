@@ -17,8 +17,9 @@ package v1beta1
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"net"
+	"strings"
 
 	utilnet "k8s.io/utils/net"
 )
@@ -28,7 +29,6 @@ var _ Validateable = (*Network)(nil)
 // Network defines the network related config options
 type Network struct {
 	Calico     *Calico     `json:"calico"`
-	DualStack  DualStack   `json:"dualStack,omitempty"`
 	KubeProxy  *KubeProxy  `json:"kubeProxy"`
 	KubeRouter *KubeRouter `json:"kuberouter"`
 
@@ -47,7 +47,6 @@ func DefaultNetwork() *Network {
 		ServiceCIDR: "10.96.0.0/12",
 		Provider:    "kuberouter",
 		KubeRouter:  DefaultKubeRouter(),
-		DualStack:   DefaultDualStack(),
 		KubeProxy:   DefaultKubeProxy(),
 	}
 }
@@ -59,39 +58,36 @@ func (n *Network) Validate() []error {
 		errors = append(errors, fmt.Errorf("unsupported network provider: %s", n.Provider))
 	}
 
-	_, _, err := net.ParseCIDR(n.PodCIDR)
+	_, err := utilnet.ParseCIDRs(strings.Split(n.PodCIDR, ","))
 	if err != nil {
 		errors = append(errors, fmt.Errorf("invalid pod CIDR %s", n.PodCIDR))
 	}
 
-	_, _, err = net.ParseCIDR(n.ServiceCIDR)
+	_, err = utilnet.ParseCIDRs(strings.Split(n.ServiceCIDR, ","))
 	if err != nil {
 		errors = append(errors, fmt.Errorf("invalid service CIDR %s", n.ServiceCIDR))
 	}
 
-	if n.DualStack.Enabled {
+	if n.IsDualStack() {
 		if n.Provider == "calico" && n.Calico.Mode != "bird" {
 			errors = append(errors, fmt.Errorf("network dual stack is supported only for calico mode `bird`"))
-		}
-		_, _, err := net.ParseCIDR(n.DualStack.IPv6PodCIDR)
-		if err != nil {
-			errors = append(errors, fmt.Errorf("invalid pod IPv6 CIDR %s", n.DualStack.IPv6PodCIDR))
-		}
-		_, _, err = net.ParseCIDR(n.DualStack.IPv6ServiceCIDR)
-		if err != nil {
-			errors = append(errors, fmt.Errorf("invalid service IPv6 CIDR %s", n.DualStack.IPv6ServiceCIDR))
 		}
 	}
 	errors = append(errors, n.KubeProxy.Validate()...)
 	return errors
 }
 
-// DNSAddress calculates the 10th address of configured service CIDR block.
+// DNSAddress calculates the 10th address of the first configured service CIDR block.
 func (n *Network) DNSAddress() (string, error) {
-	_, ipnet, err := net.ParseCIDR(n.ServiceCIDR)
+	parsedCIDRs, err := utilnet.ParseCIDRs(strings.Split(n.ServiceCIDR, ","))
 	if err != nil {
 		return "", fmt.Errorf("failed to parse service CIDR %s: %w", n.ServiceCIDR, err)
 	}
+	if len(parsedCIDRs) == 0 {
+		return "", errors.New("received empty ServiceCIDR")
+	}
+
+	ipnet := parsedCIDRs[0]
 
 	address := ipnet.IP.To4()
 	if IsIPv6String(ipnet.IP.String()) {
@@ -114,13 +110,7 @@ func (n *Network) DNSAddress() (string, error) {
 
 // InternalAPIAddresses calculates the internal API address of configured service CIDR block.
 func (n *Network) InternalAPIAddresses() ([]string, error) {
-	cidrs := []string{n.ServiceCIDR}
-
-	if n.DualStack.Enabled {
-		cidrs = append(cidrs, n.DualStack.IPv6ServiceCIDR)
-	}
-
-	parsedCIDRs, err := utilnet.ParseCIDRs(cidrs)
+	parsedCIDRs, err := utilnet.ParseCIDRs(strings.Split(n.ServiceCIDR, ","))
 	if err != nil {
 		return nil, fmt.Errorf("can't parse service cidr to build internal API address: %w", err)
 	}
@@ -164,23 +154,54 @@ func (n *Network) UnmarshalJSON(data []byte) error {
 
 // BuildServiceCIDR returns actual argument value for service cidr
 func (n *Network) BuildServiceCIDR(addr string) string {
-	if !n.DualStack.Enabled {
-		return n.ServiceCIDR
-	}
-	// because in the dual-stack mode k8s
-	// relies on the ordering of the given CIDRs
-	// we need to first give family on which
-	// api server listens
-	if IsIPv6String(addr) {
-		return n.DualStack.IPv6ServiceCIDR + "," + n.ServiceCIDR
-	}
-	return n.ServiceCIDR + "," + n.DualStack.IPv6ServiceCIDR
+	// serviceCIDR is already in the proper order so just return it.
+	return n.ServiceCIDR
 }
 
 // BuildPodCIDR returns actual argument value for pod cidr
 func (n *Network) BuildPodCIDR() string {
-	if n.DualStack.Enabled {
-		return n.DualStack.IPv6PodCIDR + "," + n.PodCIDR
-	}
+	// podCIDR is already in the proper order so just return it.
 	return n.PodCIDR
+}
+
+// Returns whether this cluster has a pure ipv6 network.
+func (n *Network) IsIPv6() bool {
+	v4Found := false
+	v6Found := false
+
+	subnets, _ := utilnet.ParseCIDRs(strings.Split(n.PodCIDR, ","))
+	for _, podSubnet := range subnets {
+		if podSubnet == nil {
+			continue
+		}
+		if utilnet.IsIPv6(podSubnet.IP) {
+			v6Found = true
+		} else {
+			v4Found = true
+		}
+	}
+	return v6Found && !v4Found
+}
+
+// Returns whether this cluster has a dualstack network.
+func (n *Network) IsDualStack() bool {
+	result, _ := utilnet.IsDualStackCIDRStrings(strings.Split(n.PodCIDR, ","))
+	return result
+}
+
+// Returns 2 comma delimited strings of ipv4, ipv6 subnets from PodCIDR.
+func (n *Network) GetPodCIDRsByFamily() (string, string) {
+	v4nets := []string{}
+	v6nets := []string{}
+
+	subnets, _ := utilnet.ParseCIDRs(strings.Split(n.PodCIDR, ","))
+	for _, podSubnet := range subnets {
+		if utilnet.IsIPv6(podSubnet.IP) {
+			v6nets = append(v6nets, podSubnet.String())
+		} else {
+			v4nets = append(v4nets, podSubnet.String())
+		}
+	}
+
+	return strings.Join(v4nets, ","), strings.Join(v6nets, ",")
 }

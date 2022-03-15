@@ -23,6 +23,8 @@ import (
 	"github.com/k0sproject/k0s/pkg/etcd"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	utilnet "k8s.io/utils/net"
 )
 
 var etcdPeerAddress string
@@ -42,6 +44,9 @@ func etcdLeaveCmd() *cobra.Command {
 			}
 
 			peerURL := fmt.Sprintf("https://%s:2380", etcdPeerAddress)
+			if utilnet.IsIPv6String(etcdPeerAddress) {
+				peerURL = fmt.Sprintf("https://[%s]:2380", etcdPeerAddress)
+			}
 			etcdClient, err := etcd.NewClient(c.K0sVars.CertRootDir, c.K0sVars.EtcdCertDir, c.NodeConfig.Spec.Storage.Etcd)
 			if err != nil {
 				return fmt.Errorf("can't connect to the etcd: %v", err)

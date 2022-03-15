@@ -141,10 +141,10 @@ func (a *APIEndpointReconciler) reconcileEndpoints(ctx context.Context) error {
 
 	if len(ep.Subsets) == 0 || needsUpdate(ipStrings, ep) {
 		ep.Subsets = []corev1.EndpointSubset{
-			corev1.EndpointSubset{
+			{
 				Addresses: stringsToEndpointAddresses(ipStrings),
 				Ports: []corev1.EndpointPort{
-					corev1.EndpointPort{
+					{
 						Name:     "https",
 						Protocol: "TCP",
 						Port:     int32(a.clusterConfig.Spec.API.Port),
@@ -172,10 +172,10 @@ func (a *APIEndpointReconciler) createEndpoint(ctx context.Context, addresses []
 			Name: "kubernetes",
 		},
 		Subsets: []corev1.EndpointSubset{
-			corev1.EndpointSubset{
+			{
 				Addresses: stringsToEndpointAddresses(addresses),
 				Ports: []corev1.EndpointPort{
-					corev1.EndpointPort{
+					{
 						Name:     "https",
 						Protocol: "TCP",
 						Port:     int32(a.clusterConfig.Spec.API.Port),

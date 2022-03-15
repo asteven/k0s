@@ -65,6 +65,7 @@ type calicoConfig struct {
 	WithWindowsNodes     bool
 	FlexVolumeDriverPath string
 	DualStack            bool
+	IPv6Only             bool
 
 	CalicoCNIImage             string
 	CalicoNodeImage            string
@@ -181,6 +182,8 @@ func (c *Calico) getConfig(clusterConfig *v1beta1.ClusterConfig) (calicoConfig, 
 	if clusterConfig.Spec.Network.Calico.IPv6AutodetectionMethod != "" {
 		ipv6AutoDetectionMethod = clusterConfig.Spec.Network.Calico.IPv6AutodetectionMethod
 	}
+	ipv4PodCIDR, ipv6PodCIDR := clusterConfig.Spec.Network.GetPodCIDRsByFamily()
+
 	config := calicoConfig{
 		MTU:                        clusterConfig.Spec.Network.Calico.MTU,
 		Mode:                       clusterConfig.Spec.Network.Calico.Mode,
@@ -188,9 +191,10 @@ func (c *Calico) getConfig(clusterConfig *v1beta1.ClusterConfig) (calicoConfig, 
 		VxlanVNI:                   clusterConfig.Spec.Network.Calico.VxlanVNI,
 		EnableWireguard:            clusterConfig.Spec.Network.Calico.EnableWireguard,
 		FlexVolumeDriverPath:       clusterConfig.Spec.Network.Calico.FlexVolumeDriverPath,
-		DualStack:                  clusterConfig.Spec.Network.DualStack.Enabled,
-		ClusterCIDRIPv4:            clusterConfig.Spec.Network.PodCIDR,
-		ClusterCIDRIPv6:            clusterConfig.Spec.Network.DualStack.IPv6PodCIDR,
+		DualStack:                  clusterConfig.Spec.Network.IsDualStack(),
+		IPv6Only:                   clusterConfig.Spec.Network.IsIPv6(),
+		ClusterCIDRIPv4:            ipv4PodCIDR,
+		ClusterCIDRIPv6:            ipv6PodCIDR,
 		CalicoCNIImage:             clusterConfig.Spec.Images.Calico.CNI.URI(),
 		CalicoNodeImage:            clusterConfig.Spec.Images.Calico.Node.URI(),
 		CalicoKubeControllersImage: clusterConfig.Spec.Images.Calico.KubeControllers.URI(),

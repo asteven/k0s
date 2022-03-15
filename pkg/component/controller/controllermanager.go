@@ -98,20 +98,24 @@ func (a *Manager) Reconcile(_ context.Context, clusterConfig *v1beta1.ClusterCon
 		"v":                                a.LogLevel,
 	}
 
-	if clusterConfig.Spec.Network.DualStack.Enabled {
+	if clusterConfig.Spec.Network.IsDualStack() {
+		args = v1beta1.EnableFeatureGate(args, v1beta1.DualStackFeatureGate)
 		args["node-cidr-mask-size-ipv6"] = "110"
 		args["node-cidr-mask-size-ipv4"] = "24"
 	} else {
-		args["node-cidr-mask-size"] = "24"
+		if clusterConfig.Spec.Network.IsIPv6() {
+			// FIXME: does this have to be ipv6 also?
+			//args["bind-address"] = "::1"
+			args["node-cidr-mask-size"] = "110"
+		} else {
+			args["node-cidr-mask-size"] = "24"
+		}
 	}
 	for name, value := range clusterConfig.Spec.ControllerManager.ExtraArgs {
 		if args[name] != "" {
 			logger.Warnf("overriding kube-controller-manager flag with user provided value: %s", name)
 		}
 		args[name] = value
-	}
-	if clusterConfig.Spec.Network.DualStack.Enabled {
-		args = v1beta1.EnableFeatureGate(args, v1beta1.DualStackFeatureGate)
 	}
 	for name, value := range cmDefaultArgs {
 		if args[name] == "" {
